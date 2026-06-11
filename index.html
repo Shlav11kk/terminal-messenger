@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal Messenger</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0a;
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        #terminal {
+            width: 100%;
+            max-width: 1000px;
+            height: 90vh;
+            max-height: 700px;
+            background: #0a0a0a;
+            border: 2px solid #0f0;
+            border-radius: 15px;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 60px rgba(0, 255, 0, 0.1);
+        }
+        #header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #0f0;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            flex-shrink: 0;
+        }
+        #header .title {
+            font-size: 18px;
+            color: #0f0;
+            text-shadow: 0 0 20px #0f0;
+            letter-spacing: 2px;
+        }
+        #header .status {
+            font-size: 11px;
+            opacity: 0.5;
+        }
+        #output {
+            flex: 1;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            padding: 5px 0;
+            margin-bottom: 10px;
+        }
+        #output::-webkit-scrollbar { width: 4px; }
+        #output::-webkit-scrollbar-thumb { background: #0f0; border-radius: 2px; }
+        #input-line {
+            display: flex;
+            align-items: center;
+            border-top: 1px solid #0f0;
+            padding-top: 10px;
+            flex-shrink: 0;
+        }
+        #prompt {
+            color: #0f0;
+            font-weight: bold;
+            margin-right: 10px;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+        #command {
+            background: transparent;
+            border: none;
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            flex: 1;
+            outline: none;
+            caret-color: #0f0;
+        }
+        .success { color: #0f0; }
+        .error { color: #f44; }
+        .info { color: #aaa; }
+        .highlight { color: #0f0; font-weight: bold; }
+        .message-item {
+            padding: 3px 5px;
+            border-bottom: 1px solid #1a3a1a;
+            font-size: 13px;
+        }
+        .message-item .author { color: #0f0; font-weight: bold; }
+        .message-item .time { color: #666; font-size: 11px; }
+        .post-item {
+            padding: 5px 8px;
+            border: 1px solid #1a3a1a;
+            border-radius: 6px;
+            margin: 3px 0;
+            font-size: 13px;
+        }
+        .post-item .title { color: #0f0; font-weight: bold; }
+        .post-item .author { color: #0f0; }
+        .post-item img {
+            max-width: 100%;
+            max-height: 200px;
+            border: 1px solid #0f0;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
+        .image-preview {
+            border: 1px solid #0f0;
+            border-radius: 4px;
+            padding: 5px;
+            margin: 5px 0;
+            max-width: 300px;
+        }
+        .image-preview img { max-width: 100%; max-height: 200px; }
+        @media (max-width: 600px) {
+            #terminal { padding: 15px; height: 95vh; }
+            #header .title { font-size: 14px; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="terminal">
+    <div id="header">
+        <div class="title">⚡ Terminal Messenger</div>
+        <div class="status">🔐 Шифрование | v3.0</div>
+    </div>
+    <div id="output">
+        <div class="highlight">=======================================</div>
+        <div>Добро пожаловать в Terminal Messenger.</div>
+        <div>Введите <span class="success">help</span> для списка команд.</div>
+        <div class="highlight">=======================================</div>
+    </div>
+    <div id="input-line">
+        <span id="prompt">[guest]@term:~$</span>
+        <input type="text" id="command" placeholder="введите команду..." autofocus>
+    </div>
+</div>
+
+<script>
+    // ============================================================
+    //  TERMINAL MESSENGER v3.0
+    //  Все 10 фич: ping, fortune, tree, passwd, theme, export, friend, stats, game, encrypt
+    // ============================================================
+
+    const output = document.getElementById('output');
+    const commandInput = document.getElementById('command');
+    const promptSpan = document.getElementById('prompt');
+
+    // --- История команд ---
+    let commandHistory = [];
+    let historyIndex = -1;
+
+    // --- Состояние ---
+    let state = {
+        user: null,
+        users: [],
+        posts: [],
+        messages: [],
+        friends: [],
+        currentPath: '/',
+        loggedIn: false,
+        theme: 'green',
+        stats: { messages: 0, posts: 0, games: 0 },
+    };
+
+    // --- Цитаты для fortune ---
+    const fortunes = [
+        "The future is already here — it's just not evenly distributed.",
+        "The Matrix is a system, Neo. That system is our enemy.",
+        "I've seen things you people wouldn't believe...",
+        "Wake up, Neo...",
+        "There is no spoon.",
+        "The world is a dangerous place, V.",
+        "Never give up, never surrender.",
+        "Freedom is the only thing that matters.",
+        "Cyberpunk is not a genre, it's a warning.",
+        "In the end, we are all just code.",
+    ];
+
+    // --- Простое шифрование ---
+    function encrypt(text, key = 42) {
+        let result = '';
+        for (let i = 0; i < text.length; i++) {
+            result += String.fromCharCode(text.charCodeAt(i) ^ key);
+        }
+        return btoa(result);
+    }
+
+    function decrypt(encoded, key = 42) {
+        try {
+            const text = atob(encoded);
+            let result = '';
+            for (let i = 0; i < text.length; i++) {
+                result += String.fromCharCode(text.charCodeAt(i) ^ key);
+            }
+            return result;
+        } catch {
+            return '[зашифровано]';
+        }
+    }
+
+    // --- Инициализация данных ---
+    function loadData() {
+        const saved = localStorage.getItem('term_messenger_data_v3');
+        if (saved) {
+            const data = JSON.parse(saved);
+            state.users = data.users || [];
+            state.posts = data.posts || [];
+            state.messages = data.messages || [];
+            state.friends = data.friends || [];
+            state.stats = data.stats || { messages: 0, posts: 0, games: 0 };
+            if (data.currentUser) {
+                state.user = data.currentUser;
+                state.loggedIn = true;
+                promptSpan.textContent = `[${state.user}]@term:~$`;
+            }
+        }
+        if (state.users.length === 0) {
+            state.users.push({ id: 1, login: 'admin', password: 'admin', name: 'Администратор' });
+            state.users.push({ id: 2, login: 'slava', password: '123', name: 'Слава' });
+            state.users.push({ id: 3, login: 'guest', password: 'guest', name: 'Гость' });
+            saveData();
+        }
+        if (state.posts.length === 0) {
+            state.posts.push({
+                id: 1,
+                title: 'Добро пожаловать!',
+                content: 'Это первый пост в Terminal Messenger.',
+                author: 'admin',
+                date: new Date().toLocaleString(),
+                image: null,
+            });
+            saveData();
+        }
+        if (state.messages.length === 0) {
+            state.messages.push({
+                id: 1,
+                from: 'admin',
+                to: 'all',
+                text: encrypt('Привет! Это общий чат. Пользуйтесь командами.'),
+                date: new Date().toLocaleString(),
+            });
+            saveData();
+        }
+        applyTheme();
+    }
+
+    function saveData() {
+        const data = {
+            users: state.users,
+            posts: state.posts,
+            messages: state.messages,
+            friends: state.friends,
+            stats: state.stats,
+            currentUser: state.user,
+        };
+        localStorage.setItem('term_messenger_data_v3', JSON.stringify(data));
+    }
+
+    // --- Тема ---
+    function applyTheme() {
+        const colors = {
+            green: { primary: '#0f0', border: '#0f0', shadow: 'rgba(0, 255, 0, 0.1)' },
+            amber: { primary: '#ffb000', border: '#ffb000', shadow: 'rgba(255, 176, 0, 0.1)' },
+            white: { primary: '#fff', border: '#fff', shadow: 'rgba(255, 255, 255, 0.1)' },
+            matrix: { primary: '#0f0', border: '#0f0', shadow: 'rgba(0, 255, 0, 0.1)' },
+        };
+        const theme = colors[state.theme] || colors.green;
+        document.getElementById('terminal').style.borderColor = theme.border;
+        document.getElementById('terminal').style.boxShadow = `0 0 60px ${theme.shadow}`;
+        document.querySelectorAll('.highlight').forEach(el => {
+            el.style.color = theme.primary;
+        });
+        document.querySelectorAll('.success').forEach(el => {
+            el.style.color = theme.primary;
+        });
+        // Применяем к заголовку
+        document.querySelector('#header .title').style.color = theme.primary;
+        document.querySelector('#header .title').style.textShadow = `0 0 20px ${theme.primary}`;
+    }
+
+    // --- Вывод ---
+    function printLine(text, className = '') {
+        const line = document.createElement('div');
+        line.textContent = text;
+        if (className) line.className = className;
+        output.appendChild(line);
+        output.scrollTop = output.scrollHeight;
+    }
+
+    function printMessage(msg) {
+        const div = document.createElement('div');
+        div.className = 'message-item';
+        const decrypted = decrypt(msg.text);
+        div.innerHTML = `
+            <span class="author">${msg.from}</span> 
+            <span class="time">[${msg.date}]</span>: 
+            ${decrypted}
+        `;
+        output.appendChild(div);
+        output.scrollTop = output.scrollHeight;
+    }
+
+    function printPost(post) {
+        const div = document.createElement('div');
+        div.className = 'post-item';
+        div.innerHTML = `
+            <div class="title">📌 ${post.title}</div>
+            <div>${post.content}</div>
+            <div style="font-size:11px; opacity:0.6;">
+                👤 ${post.author} · ${post.date}
+            </div>
+        `;
+        if (post.image) {
+            div.innerHTML += `<img src="${post.image}" alt="Картинка">`;
+        }
+        output.appendChild(div);
+        output.scrollTop = output.scrollHeight;
+    }
+
+    // --- Команды ---
+    function help() {
+        printLine('');
+        printLine('📋 ДОСТУПНЫЕ КОМАНДЫ:', 'highlight');
+        printLine('  help                    — показать этот список');
+        printLine('  login <login> <pass>    — войти в аккаунт');
+        printLine('  register <login> <pass> — создать аккаунт');
+        printLine('  logout                  — выйти');
+        printLine('  whoami                  — показать информацию о себе');
+        printLine('  users                   — список пользователей');
+        printLine('  ls                      — показать список постов');
+        printLine('  post <title>            — создать пост (ввод текста)');
+        printLine('  img <title>             — создать пост с картинкой');
+        printLine('  read <id>               — прочитать пост');
+        printLine('  rm <id>                 — удалить пост');
+        printLine('  chat                    — показать чат');
+        printLine('  say <text>              — отправить сообщение в чат');
+        printLine('  ping <host>             — проверить связь');
+        printLine('  fortune                 — случайная цитата');
+        printLine('  tree                    — дерево постов');
+        printLine('  passwd                  — сменить пароль');
+        printLine('  theme <name>            — сменить тему (green/amber/white/matrix)');
+        printLine('  export                  — экспорт постов');
+        printLine('  friend add <login>      — добавить в друзья');
+        printLine('  friend list             — список друзей');
+        printLine('  stats                   — статистика');
+        printLine('  game guess              — угадай число');
+        printLine('  encrypt <text>          — зашифровать текст');
+        printLine('  decrypt <text>          — расшифровать текст');
+        printLine('  clear                   — очистить экран');
+        printLine('  cd /                    — вернуться в корень');
+        printLine('');
+    }
+
+    function login(args) {
+        if (args.length < 2) {
+            printLine('❌ Использование: login <login> <password>', 'error');
+            return;
+        }
+        const login = args[0];
+        const password = args[1];
+        const user = state.users.find(u => u.login === login && u.password === password);
+        if (!user) {
+            printLine('❌ Неверный логин или пароль.', 'error');
+            return;
+        }
+        state.user = user.login;
+        state.loggedIn = true;
+        promptSpan.textContent = `[${state.user}]@term:~$`;
+        printLine(`✅ Добро пожаловать, ${user.name || user.login}!`, 'success');
+        saveData();
+    }
+
+    function register(args) {
+        if (args.length < 2) {
+            printLine('❌ Использование: register <login> <password>', 'error');
+            return;
+        }
+        const login = args[0];
+        const password = args[1];
+        if (state.users.find(u => u.login === login)) {
+            printLine('❌ Логин уже существует.', 'error');
+            return;
+        }
+        const name = prompt('Введите ваше имя (необязательно):') || login;
+        const id = state.users.length > 0 ? Math.max(...state.users.map(u => u.id)) + 1 : 1;
+        state.users.push({ id, login, password, name });
+        printLine(`✅ Аккаунт "${login}" создан. Войдите с помощью login.`, 'success');
+        saveData();
+    }
+
+    function logout() {
+        if (!state.loggedIn) {
+            printLine('❌ Вы не вошли.', 'error');
+            return;
+        }
+        state.user = null;
+        state.loggedIn = false;
+        promptSpan.textContent = '[guest]@term:~$';
+        printLine('✅ Вы вышли.', 'success');
+        saveData();
+    }
+
+    function whoami() {
+        if (!state.loggedIn) {
+            printLine('👤 Вы: гость', 'info');
+            return;
+        }
+        const user = state.users.find(u => u.login === state.user);
+        if (user) {
+            printLine(`👤 ID: ${user.id}`, 'info');
+            printLine(`👤 Логин: ${user.login}`, 'info');
+            printLine(`👤 Имя: ${user.name || user.login}`, 'info');
+        } else {
+            printLine(`👤 Вы: ${state.user}`, 'info');
+        }
+    }
+
+    function users() {
+        if (state.users.length === 0) {
+            printLine('👤 Пользователей нет.', 'info');
+            return;
+        }
+        printLine('');
+        printLine('👤 ПОЛЬЗОВАТЕЛИ:', 'highlight');
+        state.users.forEach(u => {
+            printLine(`  ▸ [${u.id}] ${u.login} (${u.name || u.login})`);
+        });
+        printLine('');
+    }
+
+    function ls() {
+        if (state.posts.length === 0) {
+            printLine('📭 Постов нет.', 'info');
+            return;
+        }
+        printLine('');
+        printLine('📋 СПИСОК ПОСТОВ:', 'highlight');
+        state.posts.forEach(p => {
+            const img = p.image ? '🖼️' : '';
+            printLine(`  [#${p.id}] ${p.title} ${img} — ${p.author}`);
+        });
+        printLine('');
+    }
+
+    function post(args) {
+        if (!state.loggedIn) {
+            printLine('❌ Войдите, чтобы создавать посты.', 'error');
+            return;
+        }
+        if (args.length < 1) {
+            printLine('❌ Использование: post <заголовок>', 'error');
+            return;
+        }
+        const title = args.join(' ');
+        const content = prompt('Введите текст поста:');
+        if (!content) {
+            printLine('❌ Пост не создан (пустой текст).', 'error');
+            return;
+        }
+        const id = state.posts.length > 0 ? Math.max(...state.posts.map(p => p.id)) + 1 : 1;
+        state.posts.push({
+            id,
+            title,
+            content,
+            author: state.user,
+            date: new Date().toLocaleString(),
+            image: null,
+        });
+        state.stats.posts++;
+        printLine(`✅ Пост #${id} создан.`, 'success');
+        saveData();
+    }
+
+    function imgPost(args) {
+        if (!state.loggedIn) {
+            printLine('❌ Войдите, чтобы создавать посты.', 'error');
+            return;
+        }
+        if (args.length < 1) {
+            printLine('❌ Использование: img <заголовок>', 'error');
+            return;
+        }
+        const title = args.join(' ');
+        const content = prompt('Введите текст поста:') || '';
+        const imageUrl = prompt('Введите URL картинки:');
+        if (!imageUrl) {
+            printLine('❌ Пост не создан (нужен URL картинки).', 'error');
+            return;
+        }
+        const id = state.posts.length > 0 ? Math.max(...state.posts.map(p => p.id)) + 1 : 1;
+        state.posts.push({
+            id,
+            title,
+            content,
+            author: state.user,
+            date: new Date().toLocaleString(),
+            image: imageUrl,
+        });
+        state.stats.posts++;
+        printLine(`✅ Пост #${id} с картинкой создан.`, 'success');
+        saveData();
+    }
+
+    function read(args) {
+        if (args.length < 1) {
+            printLine('❌ Использование: read <id>', 'error');
+            return;
+        }
+        const id = parseInt(args[0]);
+        const post = state.posts.find(p => p.id === id);
+        if (!post) {
+            printLine(`❌ Пост #${id} не найден.`, 'error');
+            return;
+        }
+        printPost(post);
+    }
+
+    function rm(args) {
+        if (!state.loggedIn) {
+            printLine('❌ Войдите, чтобы удалять посты.', 'error');
+            return;
+        }
+        if (args.length < 1) {
+            printLine('❌ Использование: rm <id>', 'error');
+            return;
+        }
+        const id = parseInt(args[0]);
+        const index = state.posts.findIndex(p => p.id === id);
+        if (index === -1) {
+            printLine(`❌ Пост #${id} не найден.`, 'error');
+            return;
+        }
+        if (state.posts[index].author !== state.user) {
+            printLine('❌ Вы не автор этого поста.', 'error');
+            return;
+        }
+        state.posts.splice(index, 1);
+        printLine(`✅ Пост #${id} удалён.`, 'success');
+        saveData();
+    }
+
+    function chat() {
+        if (state.messages.length === 0) {
+            printLine('💬 Сообщений нет.', 'info');
+            return;
+        }
+        printLine('');
+        printLine('💬 ЧАТ:', 'highlight');
+        state.messages.forEach(m => printMessage(m));
+        printLine('');
+    }
+
+    function say(args) {
+        if (!state.loggedIn) {
+            printLine('❌ Войдите, чтобы отправлять сообщения.', 'error');
+            return;
+        }
+        if (args.length < 1) {
+            printLine('❌ Использование: say <текст>', 'error');
+            return;
+        }
+        const text = args.join(' ');
+        const encrypted = encrypt(text);
+        const id = state.messages.length > 0 ? Math.max(...state.messages.map(m => m.id)) + 1 : 1;
+        state.messages.push({
+            id,
+            from: state.user,
+            to: 'all',
+            text: encrypted,
+            date: new Date().toLocaleString(),
+        });
+        state.stats.messages++;
+        printLine(`✅ Сообщение отправлено.`, 'success');
+        saveData();
+    }
+
+    function ping(args) {
+        if (args.length < 1) {
+            printLine('❌ Использование: ping <host>', 'error');
+            return;
+        }
+        const host = args[0];
+        const delay = Math.floor(Math.random() * 100) + 10;
+        printLine(`Pinging ${host}... ${delay}ms`, 'info');
+    }
+
+    function fortune() {
+        const quote = fortunes[Math.floor(Math.random() * fortunes.length)];
+        printLine(`🍀 ${quote}`, 'info');
+    }
+
+    function tree() {
+        if (state.posts.length === 0) {
+            printLine('📭 Постов нет.', 'info');
+            return;
+        }
+        printLine('');
+        printLine('🌳 ДЕРЕВО ПОСТОВ:', 'highlight');
+        printLine('/');
+        state.posts.forEach(p => {
+            const img = p.image ? '🖼️' : '';
+            printLine(`  └── [#${p.id}] ${p.title} ${img}`);
+        });
+        printLine('');
+    }
+
+    function passwd() {
+        if (!state.loggedIn) {
+            printLine('❌ Войдите, чтобы сменить пароль.', 'error');
+            return;
+        }
+        const newPass = prompt('Введите новый пароль:');
+        if (!newPass) {
+            printLine('❌ Пароль не изменён.', 'error');
+            return;
+        }
+        const user = state.users.find(u => u.login === state.user);
+        if (user) {
+            user.password = newPass;
+            printLine('✅ Пароль изменён.', 'success');
+            saveData();
+        }
+    }
+
+    function theme(args) {
+        if (args.length < 1) {
+            printLine('❌ Использование: theme <green/amber/white/matrix>', 'error');
+            return;
+        }
+        const name = args[0].toLowerCase();
+        if (!['green', 'amber', 'white', 'matrix'].includes(name)) {
+            printLine('❌ Доступные темы: green, amber, white, matrix', 'error');
+            return;
+        }
+        state.theme = name;
+        applyTheme();
+        printLine(`✅ Тема изменена на "${name}".`, 'success');
+        saveData();
+    }
+
+    function exportPosts() {
+        if (state.posts.length === 0) {
+            printLine('📭 Нет постов для экспорта.', 'info');
+            return;
+        }
+        let text = '📋 ЭКСПОРТ ПОСТОВ\n\n';
+        state.posts.forEach(p => {
+            text += `[#${p.id}] ${p.title}\n`;
+            text += `Автор: ${p.author}\n`;
+            text += `Дата: ${p.date}\n`;
+            text += `${p.content}\n\n`;
+        });
+        const blob = new Blob([text], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'posts.txt';
+        a.click();
+        URL.revokeObjectURL(url);
+        printLine('✅ Посты экспортированы в posts.txt', 'success');
+    }
+
+    function friend(args) {
+        if (args.length < 1) {
+            printLine('❌ Использование: friend add <login> | friend list', 'error');
+            return;
+        }
+        const sub = args[0].toLowerCase();
+        if (sub === 'list') {
+            if (state.friends.length === 0) {
+                printLine('👥 Друзей нет.', 'info');
+                return;
+            }
+            printLine('');
+            printLine('👥 ДРУЗЬЯ:', 'highlight');
+            state.friends.forEach(f => {
+                const user = state.users.find(u => u.login === f);
+                printLine(`  ▸ ${f} (${user ? user.name || user.login : '?'})`);
+            });
+            printLine('');
+            return;
+        }
+        if (sub === 'add' && args.length > 1) {
+            const friendLogin = args[1];
+            if (state.friends.includes(friendLogin)) {
+                printLine(`❌ ${friendLogin} уже в друзьях.`, 'error');
+                return;
+            }
+            if (!state.users.find(u => u.login === friendLogin)) {
+                printLine(`❌ Пользователь ${friendLogin} не найден.`, 'error');
+                return;
+            }
+            state.friends.push(friendLogin);
+            printLine(`✅ ${friendLogin} добавлен в друзья.`, 'success');
+            saveData();
+            return;
+        }
+        printLine('❌ Использование: friend add <login> | friend list', 'error');
+    }
+
+    function stats() {
+        printLine('');
+        printLine('📊 СТАТИСТИКА:', 'highlight');
+        printLine(`  📝 Постов: ${state.stats.posts}`);
+        printLine(`  💬 Сообщений: ${state.stats.messages}`);
+        printLine(`  🎮 Игр сыграно: ${state.stats.games}`);
+        printLine(`  👥 Друзей: ${state.friends.length}`);
+        printLine('');
+    }
+
+    function game(args) {
+        if (args.length < 1 || args[0].toLowerCase() !== 'guess') {
+            printLine('❌ Использование: game guess', 'error');
+            return;
+        }
+        const number = Math.floor(Math.random() * 10) + 1;
+        let attempts = 3;
+        printLine('🎮 Я загадал число от 1 до 10. У вас 3 попытки.', 'info');
+        
+        function guess() {
+            if (attempts <= 0) {
+                printLine(`❌ Вы проиграли. Было загадано: ${number}`, 'error');
+                return;
+            }
+            const input = prompt(`Попытка ${4 - attempts}: Введите число:`);
+            if (input === null) return;
+            const guessNum = parseInt(input);
+            if (isNaN(guessNum)) {
+                printLine('❌ Введите число!', 'error');
+                guess();
+                return;
+            }
+            if (guessNum === number) {
+                printLine('🎉 Вы угадали!', 'success');
+                state.stats.games++;
+                saveData();
+                return;
+            }
+            if (guessNum < number) {
+                printLine('⬆️ Число больше.', 'info');
+            } else {
+                printLine('⬇️ Число меньше.', 'info');
+            }
+            attempts--;
+            guess();
+        }
+        guess();
+    }
+
+    function encryptCmd(args) {
+        if (args.length < 1) {
+            printLine('❌ Использование: encrypt <текст>', 'error');
+            return;
+        }
+        const text = args.join(' ');
+        const encrypted = encrypt(text);
+        printLine(`🔐 Зашифровано: ${encrypted}`, 'info');
+    }
+
+    function decryptCmd(args) {
+        if (args.length < 1) {
+            printLine('❌ Использование: decrypt <текст>', 'error');
+            return;
+        }
+        const text = args.join(' ');
+        const decrypted = decrypt(text);
+        printLine(`🔓 Расшифровано: ${decrypted}`, 'info');
+    }
+
+    function cd(args) {
+        if (args.length === 0 || args[0] === '/') {
+            state.currentPath = '/';
+            printLine(`📂 Перешли в корень.`, 'info');
+            return;
+        }
+        printLine(`📂 Текущая директория: ${state.currentPath}`, 'info');
+    }
+
+    function clear() {
+        output.innerHTML = '';
+        printLine('Терминал очищен.', 'info');
+    }
+
+    // --- Обработка команд ---
+    function processCommand(cmd) {
+        const trimmed = cmd.trim();
+        if (!trimmed) return;
+
+        if (commandHistory.length === 0 || commandHistory[commandHistory.length - 1] !== trimmed) {
+            commandHistory.push(trimmed);
+        }
+        historyIndex = commandHistory.length;
+
+        const parts = trimmed.split(' ');
+        const command = parts[0].toLowerCase();
+        const args = parts.slice(1);
+
+        printLine(`[${state.loggedIn ? state.user : 'guest'}]@term:~$ ${trimmed}`);
+
+        switch (command) {
+            case 'help': help(); break;
+            case 'login': login(args); break;
+            case 'register': register(args); break;
+            case 'logout': logout(); break;
+            case 'whoami': whoami(); break;
+            case 'users': users(); break;
+            case 'ls': ls(); break;
+            case 'post': post(args); break;
+            case 'img': imgPost(args); break;
+            case 'read': read(args); break;
+            case 'rm': rm(args); break;
+            case 'chat': chat(); break;
+            case 'say': say(args); break;
+            case 'ping': ping(args); break;
+            case 'fortune': fortune(); break;
+            case 'tree': tree(); break;
+            case 'passwd': passwd(); break;
+            case 'theme': theme(args); break;
+            case 'export': exportPosts(); break;
+            case 'friend': friend(args); break;
+            case 'stats': stats(); break;
+            case 'game': game(args); break;
+            case 'encrypt': encryptCmd(args); break;
+            case 'decrypt': decryptCmd(args); break;
+            case 'cd': cd(args); break;
+            case 'clear': clear(); break;
+            default:
+                printLine(`❌ Команда не найдена: "${command}". Введите help.`, 'error');
+        }
+    }
+
+    // --- Ввод ---
+    commandInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            processCommand(commandInput.value);
+            commandInput.value = '';
+        }
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (commandHistory.length > 0 && historyIndex > 0) {
+                historyIndex--;
+                commandInput.value = commandHistory[historyIndex];
+            }
+        }
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (historyIndex < commandHistory.length - 1) {
+                historyIndex++;
+                commandInput.value = commandHistory[historyIndex];
+            } else {
+                historyIndex = commandHistory.length;
+                commandInput.value = '';
+            }
+        }
+    });
+
+    // --- Фокус ---
+    document.addEventListener('click', () => {
+        commandInput.focus();
+    });
+
+    // --- Запуск ---
+    loadData();
+    if (state.loggedIn) {
+        printLine(`✅ Вы вошли как ${state.user}.`, 'success');
+    }
+    console.log('⚡ Terminal Messenger v3.0 загружен!');
+</script>
+
+</body>
+</html>
