@@ -15,7 +15,7 @@
 
 ## 🚀 Запуск
 
-Просто откройте `index.html` в браузере или зайдите на [GitHub Pages](https://ваш-ник.github.io/terminal-messenger/).
+Просто откройте `index.html` в браузере или зайдите на 
 
 ## 🛠 Технологии
 
