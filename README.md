@@ -15,7 +15,7 @@
 
 ## 🚀 Запуск
 
-Просто откройте `index.html` в браузере или зайдите на 
+(https://shlav11kk.github.io/terminal-messenger/)
 
 ## 🛠 Технологии
 
